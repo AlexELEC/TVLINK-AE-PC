@@ -2,7 +2,7 @@ import logging
 import re
 import struct
 
-from collections import defaultdict, namedtuple
+from collections import defaultdict, namedtuple, OrderedDict
 from Crypto.Cipher import AES
 from requests.exceptions import ChunkedEncodingError
 
@@ -50,6 +50,7 @@ class HLSStreamWriter(SegmentedStreamWriter):
         self.key_uri = None
         self.key_uri_override = options.get("hls-segment-key-uri")
         self.stream_data = options.get("hls-segment-stream-data")
+        self.chunk_size = options.get("chunk-size-hls")
 
         if self.ignore_names:
             # creates a regex from a list of segment names,
@@ -135,7 +136,7 @@ class HLSStreamWriter(SegmentedStreamWriter):
             self.close()
             return
 
-    def write(self, sequence, res, chunk_size=8192):
+    def write(self, sequence, res):
         if sequence.segment.key and sequence.segment.key.method != "NONE":
             try:
                 decryptor = self.create_decryptor(sequence.segment.key,
@@ -158,8 +159,9 @@ class HLSStreamWriter(SegmentedStreamWriter):
 
             self.reader.buffer.write(pkcs7_decode(decrypted_chunk))
         else:
+            #print ('chunk-size-hls:', self.chunk_size)
             try:
-                for chunk in res.iter_content(chunk_size):
+                for chunk in res.iter_content(self.chunk_size):
                     self.reader.buffer.write(chunk)
             except ChunkedEncodingError:
                 log.error("Download of segment {0} failed", sequence.num)
@@ -443,7 +445,7 @@ class HLSStream(HTTPStream):
         except ValueError as err:
             raise IOError("Failed to parse playlist: {0}".format(err))
 
-        streams = {}
+        streams = OrderedDict()
         for playlist in filter(lambda p: not p.is_iframe, parser.playlists):
             names = dict(name=None, pixels=None, bitrate=None)
             audio_streams = []
